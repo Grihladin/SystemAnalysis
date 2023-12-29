@@ -1,107 +1,82 @@
 import json
 import sys
-from typing import Any, Optional
+from typing import Dict, Optional, Any
 
-
-class Node:
-    def __init__(self, value: str, childred: dict[str, "Node"] | None = None, parent: Optional["Node"] = None) -> None:
-        if childred is None:
-            childred = {}
-        self.childred: dict[str, "Node"] = childred
+class TreeNode:
+    def __init__(self, value: str, children: Optional[Dict[str, "TreeNode"]] = None, parent: Optional["TreeNode"] = None) -> None:
+        self.children = children if children is not None else {}
         self.value = value
         self.parent = parent
 
-    def append(self, value: str) -> "Node":
-        node = self.__class__(value, parent=self)
-        self.childred[value] = node
-        return node
+    def append_child(self, child_value: str) -> "TreeNode":
+        child_node = TreeNode(child_value, parent=self)
+        self.children[child_value] = child_node
+        return child_node
 
-    def __getitem__(self, value: str) -> "Node":
-        return self.childred[value]
+    def get_child(self, child_value: str) -> "TreeNode":
+        return self.children[child_value]
 
-    def jsonable(self) -> dict[str, Any]:
-        return {self.value: self._walk()}
+    def to_json(self) -> Dict[str, Any]:
+        return {self.value: self._traverse()}
 
-    def _walk(self) -> dict[str, Any]:
-        if len(self.childred) == 0:
-            return {}
-
-        path: dict[str, Any] = {}
-        for key, child in self.childred.items():
-            path[key] = child._walk()
-
-        return path
+    def _traverse(self) -> Dict[str, Any]:
+        return {key: child._traverse() for key, child in self.children.items()}
 
     def __str__(self) -> str:
-        return json.dumps(self.jsonable(), indent=4)
+        return json.dumps(self.to_json(), indent=4)
 
-    def find(self, value: str) -> "Node":
-        if self.value == value:
+    def find_node(self, search_value: str) -> "TreeNode":
+        if self.value == search_value:
             return self
 
-        for child in self.childred.values():
-            if child.value == value:
-                return child
+        for child in self.children.values():
             try:
-                child_find = child.find(value)
+                return child.find_node(search_value)
             except KeyError:
-                ...
-            else:
-                return child_find
+                continue
 
-        raise KeyError(f"Child with value: {value} not found")
+        raise KeyError(f"Child with value '{search_value}' not found.")
 
-    def append_from_dict(self, value: str, dict_: dict[str, Any], parent: Optional["Node"] = None) -> "Node":
-        node = Node(value=value, parent=parent)
+    def append_from_dict(self, value: str, dict_: Dict[str, Any], parent: Optional["TreeNode"] = None) -> "TreeNode":
+        node = TreeNode(value=value, parent=parent)
         for key, child_dict in dict_.items():
-            node.childred[key] = node.append_from_dict(value=key, dict_=child_dict, parent=node)
+            node.children[key] = node.append_from_dict(value=key, dict_=child_dict, parent=node)
 
         return node
 
     @classmethod
-    def read(cls, filename: str) -> "Node":
-        with open(filename, "r") as f:
-            dict_ = json.load(f)
-        root_key = list(dict_.keys())[0]
-        root = Node(root_key)
-        for key, child_dict in dict_[root_key].items():
-            root.childred[key] = root.append_from_dict(value=key, dict_=child_dict, parent=root)
+    def from_file(cls, filename: str) -> "TreeNode":
+        with open(filename, "r") as file:
+            data = json.load(file)
+        root_key = next(iter(data))
+        root = TreeNode(root_key)
+        for key, child_data in data[root_key].items():
+            root.children[key] = root.append_from_dict(value=key, dict_=child_data, parent=root)
         return root
 
-    def pprint(self) -> str:
-        str_ = self.value
-        for child in self.childred.values():
-            str_ += f" {child.value}"
-        if self.parent is not None:
-            str_ += f" {self.parent.value}"
-        str_ += "\n"
+    def pretty_print(self) -> str:
+        content = self.value
+        for child in self.children.values():
+            content += f" {child.value}"
+        if self.parent:
+            content += f" {self.parent.value}"
+        content += "\n"
 
-        for child in self.childred.values():
-            str_ += child.pprint()
+        for child in self.children.values():
+            content += child.pretty_print()
 
-        return str_
+        return content
 
-
-def example() -> None:
-    root = Node("1")
-    root.append("2")
-    root.find("2").append("3")
-    root.find("2").append("4")
-    root.find("4").append("5")
-    root.find("4").append("6")
-    root.find("5").append("7")
-    root.find("5").append("8")
+def example_usage() -> None:
+    root = TreeNode("1")
+    node_2 = root.append_child("2")
+    node_2.append_child("3")
+    node_4 = node_2.append_child("4")
+    node_4.append_child("5").append_child("7")
+    node_4.append_child("6")
 
     print(root)
-    print(root.pprint())
-
-
-def main() -> None:
-    root = Node.read(sys.argv[1])
-
-    # print(root)
-    print(root.pprint())
-
+    print(root.pretty_print())
 
 if __name__ == "__main__":
-    example()
+    example_usage()
